@@ -5,8 +5,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
 from sklearn.metrics import mean_absolute_error, r2_score
 
-train = pd.read_csv("train.csv", index_col=0, parse_dates=True)
-test  = pd.read_csv("test.csv",  index_col=0, parse_dates=True)
+train = pd.read_csv("Datasets/train.csv", index_col=0, parse_dates=True)
+test  = pd.read_csv("Datasets/test.csv",  index_col=0, parse_dates=True)
 
 features = ["hour_sin","hour_cos","dow","is_weekend","is_peak","occupancy_pct",
     "is_exam_period","is_festival_or_holiday","outdoor_temp_c","humidity_pct","cloud_cover_pct",
