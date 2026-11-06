@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hostel Energy Advisor</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f6f8f4;--ink:#14213d;--mut:#5d6b78;--line:#d9e0d8;--save:#0f766e;--sun:#d98e00;--tint:#e6f2ee;--drop:#fff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1720;--ink:#e9eef3;--mut:#9aa8b5;--line:#26323d;--save:#3fc2b0;--sun:#f2b134;--tint:#12302d;--drop:#16212b}}
+:root[data-theme="dark"]{--bg:#0f1720;--ink:#e9eef3;--mut:#9aa8b5;--line:#26323d;--save:#3fc2b0;--sun:#f2b134;--tint:#12302d;--drop:#16212b}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:760px;margin:0 auto;padding:28px 20px 64px}
+h1{font-size:30px;line-height:1.15;margin:0 0 6px;letter-spacing:-.02em}
+h2{font-size:20px;margin:36px 0 10px}
+.sub{color:var(--mut);margin:0 0 22px;max-width:56ch}
+#drop{border:2px dashed var(--line);background:var(--drop);border-radius:14px;padding:34px 20px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
+#drop:hover,#drop.over,#drop:focus-visible{border-color:var(--save);background:var(--tint);outline:none}
+#drop b{display:block;font-size:18px;margin-bottom:4px}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:14px}
+button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--save);background:var(--save);color:#fff;padding:9px 16px;font-weight:600}
+button.alt{background:transparent;color:var(--save)}
+button:focus-visible{outline:3px solid var(--sun);outline-offset:2px}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) button{color:#06201c}:root:not([data-theme="light"]) button.alt{color:var(--save)}}
+details{margin-top:14px;color:var(--mut);font-size:14px}summary{cursor:pointer;color:var(--ink)}
+.err{color:#b3261e;margin-top:12px}
+@media (prefers-color-scheme:dark){.err{color:#ff8a80}}
+#prog li{list-style:none;padding:6px 0;color:var(--mut)}#prog{padding:0;margin:8px 0}
+#prog li.done{color:var(--ink)}#prog li.done:before{content:"✓ ";color:var(--save);font-weight:700}
+#prog li:not(.done):before{content:"… "}
+.big{font-size:44px;font-weight:700;color:var(--save);line-height:1.1;letter-spacing:-.02em}
+.two{display:flex;flex-wrap:wrap;gap:28px;margin:14px 0}
+.two div small{display:block;color:var(--mut)}
+.plan{border-top:1px solid var(--line)}
+.item{display:grid;grid-template-columns:1fr auto;gap:4px 16px;padding:14px 0;border-bottom:1px solid var(--line)}
+.item b{font-size:17px}.item span.how{color:var(--mut);grid-column:1}
+.amt{font-weight:700;color:var(--save);text-align:right;white-space:nowrap}
+.tag{font-size:13px;color:var(--mut);text-align:right}
+table{border-collapse:collapse;width:100%;font-size:15px}th,td{text-align:right;padding:8px 6px;border-bottom:1px solid var(--line)}th:first-child,td:first-child{text-align:left}th{color:var(--mut);font-weight:500}
+tr.best td{background:var(--tint);font-weight:700}
+.scroll{overflow-x:auto}
+label{font-size:14px;color:var(--mut)}input[type=number]{font:inherit;width:110px;padding:6px;border:1px solid var(--line);border-radius:6px;background:var(--drop);color:var(--ink)}
+.note{font-size:13px;color:var(--mut);margin-top:30px;max-width:62ch}
+[hidden]{display:none!important}
+</style></head><body><main>
+<h1>Find out how much your hostel can save on electricity</h1>
+<p class="sub">Drop in your energy data. In a few seconds you get a plain list of changes, and how many rupees each one saves every month.</p>
+
+<section id="up">
+<div id="drop" tabindex="0" role="button" aria-label="Choose or drop your data file"><b>Drop your data file here</b>or click to choose it (CSV or Excel saved as CSV)</div>
+<input id="file" type="file" accept=".csv,text/csv" multiple hidden>
+<div class="row"><button class="alt" id="demo">Try with sample data</button><span style="color:var(--mut);font-size:14px">No file handy? See a full example first.</span></div>
+<details><summary>What should my file contain?</summary>
+<p>One row for every 30 minutes, with these columns (names can differ slightly):</p>
+<p><b>Needed:</b> date and time, total electricity used (kWh), solar electricity made (kWh).<br>
+<b>Helpful, not required:</b> price per kWh, and kWh for laundry, water pumps, water heaters, air conditioners. The more you add, the more ideas we can test.</p>
+<p>You can drop several files at once if they share the same columns. Your data stays in this browser and is never uploaded.</p></details>
+<div class="err" id="err" role="alert"></div>
+</section>
+
+<section id="run" hidden><h2>Working on it</h2><ul id="prog"></ul></section>
+<section id="out" hidden></section>
+<p class="note">These are estimates from a simplified model that runs in your browser. They show where the savings are and roughly how big they are. Prices for a final purchase decision should come from supplier quotes.</p>
+</main>
+<script>
+const $=s=>document.querySelector(s),R=n=>"₹"+Math.round(n).toLocaleString("en-IN"),sleep=t=>new Promise(r=>setTimeout(r,t));
+const drop=$("#drop"),inp=$("#file");
+drop.onclick=()=>inp.click();drop.onkeydown=e=>{if(e.key==="Enter"||e.key===" ")inp.click()};
+["dragover","dragenter"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add("over")}));
+["dragleave","drop"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove("over")}));
+drop.addEventListener("drop",e=>go(e.dataTransfer.files));inp.onchange=()=>go(inp.files);
+$("#demo").onclick=()=>start(sample());
+
+async function go(files){try{const t=await Promise.all([...files].map(f=>f.text()));
+ start(t[0]+t.slice(1).map(x=>"\n"+x.split(/\r?\n/).slice(1).join("\n")).join(""))}catch(e){fail("We could not read that file. Please save it as CSV and try again.")}}
+function fail(m){$("#err").textContent=m;$("#up").hidden=false;$("#run").hidden=true;$("#out").hidden=true}
+
+function sample(){let r=["timestamp,total_consumption_kwh,solar_generation_kwh,grid_tariff_inr_per_kwh,laundry_machines_kwh,water_pumps_kwh,water_heaters_kwh,air_conditioners_kwh"],s=7;
+ const q=()=>(s=s*16807%2147483647)/2147483647,b=(h,c,w)=>Math.exp(-(((h-c)/w)**2)),p=n=>String(n).padStart(2,"0");
+ for(let d=0;d<30;d++){const cl=.1+.6*q(),wk=d%7>4?1:0,t=new Date(2026,9,1+d);
+  for(let i=0;i<48;i++){const h=i/2,sun=h>6.5&&h<18?Math.sin(Math.PI*(h-6.5)/11.5)**1.2:0,sol=100*sun*.41*(1-.7*cl),
+   lau=1.6*(b(h,10,2.5)+.6*b(h,15,2))*(1+wk)*(.6+.8*q()),pu=1.1*(b(h,6.5,1)+b(h,19.5,1)),ge=5.5*(b(h,6.5,1.2)+.9*b(h,20,1.2)),
+   ac=(8*b(h,21,3.2)+2*b(h,14,3))*(.8+.4*q()),base=6+6*b(h,20,3)+4*b(h,8,1.5)+3*b(h,13,1.5)+.5*q(),
+   tar=h>=18&&h<22?9.5:h>=6&&h<18?7:5.5,tot=base+ac+lau+pu+ge;
+   r.push(`${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())} ${p(Math.floor(h))}:${i%2?"30":"00"},${tot.toFixed(3)},${sol.toFixed(3)},${tar},${lau.toFixed(3)},${pu.toFixed(3)},${ge.toFixed(3)},${ac.toFixed(3)}`)}}
+ return r.join("\n")}
+
+function parse(text){
+ const L=text.trim().split(/\r?\n/).filter(Boolean),H=L[0].split(",").map(x=>x.trim().toLowerCase().replace(/^\uFEFF/,"")),f=(...rs)=>{for(const re of rs){const i=H.findIndex(h=>re.test(h));if(i>=0)return i}return -1};
+ const c={t:f(/time|date/),tot:f(/total.*consum/,/total/),sol:f(/solar.*gen/,/solar.*kwh/,/solar/),tar:f(/tariff.*(inr|kwh)/,/tariff/,/price|rate/),lau:f(/laundry/),pu:f(/pump/),ge:f(/heater|geyser/),ac:f(/air_?cond|^ac|aircon/)},miss=[];
+ if(c.t<0)miss.push("a date and time column");if(c.tot<0)miss.push("a total electricity used column (with the word “total” in its name)");if(c.sol<0)miss.push("a solar electricity made column (with the word “solar” in its name)");
+ if(miss.length)throw new Error("Your file is missing "+miss.join(", ")+". Please add and try again.");
+ const n=v=>{const x=parseFloat(v);return isFinite(x)?x:0},rows=[];let bad=0;
+ for(let i=1;i<L.length;i++){const z=L[i].split(","),m=(z[c.t]||"").match(/(\d{4}-\d\d-\d\d)[ T](\d\d):(\d\d)/);if(!m){bad++;continue}
+  rows.push({k:m[1]+m[2]+m[3],day:m[1],h:+m[2]+(+m[3])/60,tot:n(z[c.tot]),sol:n(z[c.sol]),tar:c.tar<0?null:n(z[c.tar]),lau:c.lau<0?0:n(z[c.lau]),pu:c.pu<0?0:n(z[c.pu]),ge:c.ge<0?0:n(z[c.ge]),ac:c.ac<0?0:n(z[c.ac])})}
+ if(rows.length<48)throw new Error("We found fewer than one day of readable rows. Dates should look like 2026-10-01 08:30.");
+ rows.sort((a,b)=>a.k<b.k?-1:1);return{rows,c,bad}}
+
+function analyse(text){
+ const{rows,c,bad}=parse(text),N=rows.length,hr=rows.map(r=>r.h),tot=rows.map(r=>r.tot),sol=rows.map(r=>r.sol);
+ const tar=rows.map(r=>r.tar!=null?r.tar:r.h>=18&&r.h<22?9.5:r.h>=6&&r.h<18?7:5.5),mx=Math.max(...tar),pk=tar.map(t=>mx>Math.min(...tar)&&t>=.95*mx);
+ const days=[];let cur="",g;rows.forEach((r,i)=>{if(r.day!==cur){cur=r.day;g=[];days.push(g)}g.push(i)});const nd=days.length,M=30/nd;
+ const cost=t=>t.reduce((a,v,i)=>a+Math.max(0,v-sol[i])*tar[i],0),base=cost(tot);
+ // forecast check
+ let lag=nd>=14?336:nd>=3?48:0,err=null;if(lag){let e=0,s=0;for(let i=lag;i<N;i++){e+=Math.abs(tot[i]-tot[i-lag]);s+=tot[i]}err=100*e/s}
+ // hourly pattern
+ const hu=Array(24).fill(0),hs=Array(24).fill(0),hc=Array(24).fill(0);rows.forEach(r=>{const k=Math.floor(r.h);hu[k]+=r.tot;hs[k]+=r.sol;hc[k]++});
+ const hU=hu.map((v,k)=>v/hc[k]),hS=hs.map((v,k)=>v/hc[k]),top=[...hU.keys()].sort((a,b)=>hU[b]-hU[a]).slice(0,3).sort((a,b)=>a-b);
+ // levers
+ const move=(t,rem,win,cap,loss)=>{t=t.slice();for(const d of days){let E=d.reduce((a,i)=>a+rem[i],0)*(1+loss);d.forEach(i=>t[i]-=rem[i]);
+  const w=d.filter(i=>win(hr[i])),al={};w.forEach(i=>al[i]=0);const hd={};w.forEach(i=>hd[i]=Math.max(0,sol[i]-t[i]));
+  for(const i of [...w].sort((a,b)=>hd[b]-hd[a])){if(E<=1e-9)break;const x=Math.min(E,cap,hd[i]);al[i]+=x;E-=x}
+  for(const i of [...w].sort((a,b)=>tar[a]-tar[b])){if(E<=1e-9)break;const x=Math.min(E,cap-al[i]);al[i]+=x;E-=x}
+  w.forEach(i=>t[i]+=al[i])}return t};
+ const col=k=>rows.map(r=>r[k]),has=k=>col(k).some(v=>v>0),pkOnly=(a,s)=>a.map((v,i)=>pk[i]?v*s:0);
+ const L=[];
+ if(has("lau")||has("pu"))L.push({n:"Run laundry and water pumps in the middle of the day",how:"Midday solar power is free, and evenings cost the most. Ask the laundry and pump staff to work between 9 am and 5 pm.",tag:"Free",f:t=>move(move(t,col("lau"),h=>h>=9&&h<=17.5,3,0),col("pu"),h=>h>=9&&h<=16.5,1.5,0)});
+ if(has("ac"))L.push({n:"Set air conditioners 2 °C warmer",how:"A setting of 26 °C instead of 24 °C uses about 12% less AC power, and most people barely notice.",tag:"Hostel rule",f:t=>t.map((v,i)=>v-.12*rows[i].ac)});
+ if(has("ac")&&mx>Math.min(...tar))L.push({n:"Cool rooms in the afternoon, before the evening rush",how:"Start cooling between 2 pm and 5:30 pm while solar is strong, so less AC runs when power is expensive.",tag:"Hostel rule",f:t=>move(t,pkOnly(col("ac"),.25),h=>h>=14&&h<=17.5,6,.15)});
+ if(has("ge")&&mx>Math.min(...tar))L.push({n:"Heat water at midday and store it in an insulated tank",how:"Instead of heating water in the evening, heat it from midday sun. Needs an insulated storage tank.",tag:"Equipment",f:t=>move(t,pkOnly(col("ge"),.6),h=>h>=10&&h<=15.5,6,.12)});
+ let t=tot;const plan=L.map(l=>{const b=cost(t);t=l.f(t);return{...l,s:(b-cost(t))*M}});plan.sort((a,b)=>b.s-a.s);
+ return{N,nd,bad,base:base*M,after:cost(t)*M,plan,after_t:t,sol,tar,pk,tot,M,err,hU,hS,top,missing:["lau","pu","ge","ac"].filter(k=>!has(k)),tariffGiven:c.tar>=0&&mx>Math.min(...tar)}}
+
+function battery(a,cap,price){const eta=Math.sqrt(.9),p=cap*.25;let soc=cap*.1,bill=0,dis=0;
+ a.after_t.forEach((v,i)=>{const s=Math.max(0,a.sol[i]-v),im=Math.max(0,v-a.sol[i]),ch=Math.min(s,p,(cap-soc)/eta);soc+=ch*eta;
+  const d=a.pk[i]?Math.min(im,p,(soc-cap*.1)*eta):0;soc-=d/eta;dis+=d;bill+=(im-d)*a.tar[i]});
+ const cy=dis/(cap*.9)*365/a.nd,life=Math.min(12,4000/Math.max(cy,1e-9));
+ return{cap,bill:bill*a.M,save:(a.afterRaw-bill)*a.M,profit:(a.afterRaw-bill)*365/a.nd-cap*price/life,life,capex:cap*price}}
+
+async function start(text){
+ $("#err").textContent="";$("#up").hidden=true;$("#run").hidden=false;$("#out").hidden=true;
+ const steps=["Checking your file","Learning your daily pattern","Testing habit changes","Sizing a battery","Writing your plan"],ul=$("#prog");ul.innerHTML=steps.map(s=>`<li>${s}</li>`).join("");
+ let a;try{a=analyse(text)}catch(e){return fail(e.message)}
+ a.afterRaw=a.after_t.reduce((s,v,i)=>s+Math.max(0,v-a.sol[i])*a.tar[i],0);
+ for(const li of ul.children){await sleep(380);li.classList.add("done")}
+ $("#run").hidden=true;render(a,25000)}
+
+function chart(a){const W=480,H=130,mx=Math.max(...a.hU,...a.hS)||1,bw=W/24;
+ const bars=a.hU.map((v,k)=>`<rect x="${k*bw+2}" y="${H-v/mx*H}" width="${bw-4}" height="${v/mx*H}" rx="2" style="fill:var(--save);opacity:.8"/>`).join("");
+ const pts=a.hS.map((v,k)=>`${k*bw+bw/2},${H-v/mx*H}`).join(" ");
+ return`<svg viewBox="0 0 ${W} ${H+20}" width="100%" role="img" aria-label="Electricity used and solar made by hour of day">${bars}<polyline points="${pts}" fill="none" style="stroke:var(--sun)" stroke-width="3"/>
+ ${[0,6,12,18].map(h=>`<text x="${h*bw}" y="${H+15}" font-size="11" style="fill:var(--mut)">${h===0?"12 am":h<12?h+" am":h===12?"12 pm":h-12+" pm"}</text>`).join("")}</svg>`}
+const hl=h=>h===0?"12 am":h<12?h+" am":h===12?"12 pm":h-12+" pm";
+
+function render(a,price){
+ const total=a.plan.reduce((s,p)=>s+p.s,0),pct=a.base?100*total/a.base:0,out=$("#out");
+ const rowsB=[0,50,100,150,200,300].slice(1).map(c=>battery(a,c,price)),best=rowsB.reduce((x,y)=>y.profit>x.profit?y:x);
+ out.hidden=false;out.innerHTML=`
+ <h2 style="margin-top:0">Your result</h2>
+ <div class="big">${R(total)} a month</div>
+ <p style="margin:2px 0 0">is what these simple changes could save you${a.plan.length?"":" (add more columns to unlock more ideas)"}.</p>
+ <div class="two"><div><small>Estimated bill now</small><b style="font-size:22px">${R(a.base)}</b></div><div><small>After the changes</small><b style="font-size:22px">${R(a.after)}</b></div><div><small>Saving</small><b style="font-size:22px">${pct.toFixed(1)}%</b></div></div>
+ <h2>What to change</h2>
+ <div class="plan">${a.plan.map(p=>`<div class="item"><b>${p.n}</b><span class="amt">${R(p.s)} / month</span><span class="how">${p.how}</span><span class="tag">${p.tag}</span></div>`).join("")||"<p>We need laundry, pump, water heater or air conditioner columns to suggest habit changes.</p>"}</div>
+ <h2>When you use the most power</h2>
+ <p style="margin:0 0 8px">Your busiest hours are around <b>${a.top.map(hl).join(", ")}</b>. The green bars show your electricity use, the gold line shows solar.</p>${chart(a)}
+ ${a.err!=null?`<p style="color:var(--mut)">Your use is fairly regular: day to day, the same time slot differs by about ${a.err.toFixed(0)}%. ${a.err<20?"That makes it easy to plan ahead.":"Spikes like events or holidays make planning harder."}</p>`:""}
+ <h2>Should you buy a battery?</h2>
+ <p style="margin:0 0 8px">A battery stores free midday solar and uses it in the expensive evening hours. This table counts replacing the battery when it wears out (every ${best.life.toFixed(0)} years or so).</p>
+ <div class="row" style="margin:0 0 8px"><label>Battery price per kWh (₹) <input id="pr" type="number" value="${price}" min="5000" step="1000"></label></div>
+ <div class="scroll"><table><tr><th>Battery size</th><th>Cost to buy</th><th>Bill per month</th><th>Profit per year*</th></tr>
+ ${rowsB.map(r=>`<tr class="${best.profit>0&&r===best?"best":""}"><td>${r.cap} kWh</td><td>${R(r.capex)}</td><td>${R(r.bill)}</td><td>${R(r.profit)}</td></tr>`).join("")}</table></div>
+ <p style="color:var(--mut);font-size:14px">*Savings minus the yearly cost of buying and replacing the battery. ${best.profit>0?`Best choice at this price: <b>${best.cap} kWh</b>.`:"At this price, no battery size pays for itself yet. Try a lower price if you have a quote."}</p>
+ <div class="row"><button id="again">Check another file</button></div>
+ <p class="note">Based on ${a.nd} day${a.nd>1?"s":""} of data (${a.N} readings${a.bad?`, ${a.bad} unreadable rows skipped`:""}). ${a.tariffGiven?"":"No price column was found, so we assumed ₹5.5 at night, ₹7 by day and ₹9.5 from 6 pm to 10 pm. "}${a.missing.length?"Columns not found: "+a.missing.map(k=>({lau:"laundry",pu:"pumps",ge:"water heaters",ac:"air conditioners"}[k])).join(", ")+". ":""}${a.nd<60?"Short data covers only one season, so treat the battery numbers with extra care.":""}</p>`;
+ $("#pr").onchange=e=>render(a,Math.max(1000,+e.target.value||25000));
+ $("#again").onclick=()=>{out.hidden=true;$("#up").hidden=false;inp.value=""};
+ out.scrollIntoView({behavior:"smooth",block:"start"})}
+</script></body></html>

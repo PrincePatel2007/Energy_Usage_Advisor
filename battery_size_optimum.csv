@@ -1,0 +1,5 @@
+scenario,best_size_kwh,net_profit_per_year,bill_per_month,cycles_per_day,replace_every_yrs
+"Price 25,000 per kWh (main case)",150.0,81275.0,81114.0,0.95,11.6
+"Price 18,000 per kWh",200.0,192133.0,73083.0,0.95,11.6
+"Price 35,000 per kWh",25.0,-1714.0,108454.0,0.94,11.7
+"25,000 and savings 20% lower (monsoon/winter haircut)",100.0,15342.0,96092.0,0.9,12.0
