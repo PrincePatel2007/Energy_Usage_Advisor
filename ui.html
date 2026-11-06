@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hostel Energy Advisor</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f6f8f4;--ink:#14213d;--mut:#5d6b78;--line:#d9e0d8;--save:#0f766e;--sun:#d98e00;--tint:#e6f2ee;--drop:#fff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1720;--ink:#e9eef3;--mut:#9aa8b5;--line:#26323d;--save:#3fc2b0;--sun:#f2b134;--tint:#12302d;--drop:#16212b}}
+:root[data-theme="dark"]{--bg:#0f1720;--ink:#e9eef3;--mut:#9aa8b5;--line:#26323d;--save:#3fc2b0;--sun:#f2b134;--tint:#12302d;--drop:#16212b}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:760px;margin:0 auto;padding:28px 20px 64px}
+h1{font-size:30px;line-height:1.15;margin:0 0 6px;letter-spacing:-.02em}
+h2{font-size:20px;margin:36px 0 10px}
+.sub{color:var(--mut);margin:0 0 22px;max-width:56ch}
+#drop{border:2px dashed var(--line);background:var(--drop);border-radius:14px;padding:34px 20px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
+#drop:hover,#drop.over,#drop:focus-visible{border-color:var(--save);background:var(--tint);outline:none}
+#drop b{display:block;font-size:18px;margin-bottom:4px}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:14px}
+button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--save);background:var(--save);color:#fff;padding:9px 16px;font-weight:600}
+button.alt{background:transparent;color:var(--save)}
+button:focus-visible{outline:3px solid var(--sun);outline-offset:2px}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) button{color:#06201c}:root:not([data-theme="light"]) button.alt{color:var(--save)}}
+details{margin-top:14px;color:var(--mut);font-size:14px}summary{cursor:pointer;color:var(--ink)}
+.err{color:#b3261e;margin-top:12px}
+@media (prefers-color-scheme:dark){.err{color:#ff8a80}}
+#prog li{list-style:none;padding:6px 0;color:var(--mut)}#prog{padding:0;margin:8px 0}
+#prog li.done{color:var(--ink)}#prog li.done:before{content:"✓ ";color:var(--save);font-weight:700}
+#prog li:not(.done):before{content:"… "}
+.big{font-size:44px;font-weight:700;color:var(--save);line-height:1.1;letter-spacing:-.02em}
+.two{display:flex;flex-wrap:wrap;gap:28px;margin:14px 0}
+.two div small{display:block;color:var(--mut)}
+.plan{border-top:1px solid var(--line)}
+.item{display:grid;grid-template-columns:1fr auto;gap:4px 16px;padding:14px 0;border-bottom:1px solid var(--line)}
+.item b{font-size:17px}.item span.how{color:var(--mut);grid-column:1}
+.amt{font-weight:700;color:var(--save);text-align:right;white-space:nowrap}
+.tag{font-size:13px;color:var(--mut);text-align:right}
+table{border-collapse:collapse;width:100%;font-size:15px}th,td{text-align:right;padding:8px 6px;border-bottom:1px solid var(--line)}th:first-child,td:first-child{text-align:left}th{color:var(--mut);font-weight:500}
+tr.best td{background:var(--tint);font-weight:700}
+.scroll{overflow-x:auto}
+label{font-size:14px;color:var(--mut)}input[type=number]{font:inherit;width:110px;padding:6px;border:1px solid var(--line);border-radius:6px;background:var(--drop);color:var(--ink)}
+.note{font-size:13px;color:var(--mut);margin-top:30px;max-width:62ch}
+[hidden]{display:none!important}
+</style></head><body><main>
+<h1>Find out how much your hostel can save on electricity</h1>
+<p class="sub">Drop in your energy data. In a few seconds you get a plain list of changes, and how many rupees each one saves every month.</p>
+
+<section id="up">
+<div id="drop" tabindex="0" role="button" aria-label="Choose or drop your data file"><b>Drop your data file here</b>or click to choose it (CSV or Excel saved as CSV)</div>
+<input id="file" type="file" accept=".csv,text/csv" multiple hidden>
+<div class="row"><button class="alt" id="demo">Use the test file</button><span style="color:var(--mut);font-size:14px">No file handy? Run the built-in 3-month test dataset.</span></div>
+<details><summary>What should my file contain?</summary>
+<p>One row for every 30 minutes, with these columns (names can differ slightly):</p>
+<p><b>Needed:</b> date and time, total electricity used (kWh), solar electricity made (kWh).<br>
+<b>Helpful, not required:</b> price per kWh, and kWh for laundry, water pumps, water heaters, air conditioners. The more you add, the more ideas we can test.</p>
+<p>Readings must be every 30 minutes, for at least 3 weeks (3 months is best). You can drop several files at once if they share the same columns. Your data stays on this computer.</p></details>
+<div class="err" id="err" role="alert"></div>
+</section>
+
+<section id="run" hidden><h2>Working on it</h2><ul id="prog"></ul></section>
+<section id="out" hidden></section>
+<p class="note">These results come from the full analysis (forecasting, pattern finding, optimal battery scheduling) running on this computer. They are estimates based on your data. Use supplier quotes before buying equipment.</p>
+</main>
+<script>
+const $=s=>document.querySelector(s),R=n=>"₹"+Math.round(n).toLocaleString("en-IN"),drop=$("#drop"),inp=$("#file");
+drop.onclick=()=>inp.click();drop.onkeydown=e=>{if(e.key==="Enter"||e.key===" ")inp.click()};
+["dragover","dragenter"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add("over")}));
+["dragleave","drop"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove("over")}));
+drop.addEventListener("drop",e=>go(e.dataTransfer.files));inp.onchange=()=>go(inp.files);$("#demo").onclick=()=>send("",true);
+async function go(files){try{const t=await Promise.all([...files].map(f=>f.text()));send(t[0]+t.slice(1).map(x=>"\n"+x.split(/\r?\n/).slice(1).join("\n")).join(""),false)}catch(e){fail("We could not read that file. Please save it as CSV and try again.")}}
+function fail(m){$("#err").textContent=m;$("#up").hidden=false;$("#run").hidden=true;$("#out").hidden=true}
+async function send(body,sample){$("#err").textContent="";$("#up").hidden=true;$("#run").hidden=false;$("#out").hidden=true;$("#prog").innerHTML="";
+ try{const j=await(await fetch("/api/run"+(sample?"?sample=1":""),{method:"POST",body})).json();poll(j.job)}catch(e){fail("Could not reach the app. Make sure it is still running in your terminal.")}}
+async function poll(job){let r;try{r=await(await fetch("/api/status?job="+job)).json()}catch(e){return fail("Lost contact with the app. Is it still running in your terminal?")}
+ $("#prog").innerHTML=r.steps.map(s=>`<li class="${s.state==="done"?"done":""}">${s.name}${s.state==="run"?" (working…)":s.state==="skip"?" – skipped: "+s.msg:""}</li>`).join("");
+ if(r.error)return fail(r.error);if(r.done){$("#run").hidden=true;render(r.result,job)}else setTimeout(()=>poll(job),800)}
+const hl=h=>h===0?"12 am":h<12?h+" am":h===12?"12 pm":h-12+" pm";
+function chart(x){const W=480,H=130,mx=Math.max(...x.use,...x.solar)||1,bw=W/24;
+ const bars=x.use.map((v,k)=>`<rect x="${k*bw+2}" y="${H-v/mx*H}" width="${bw-4}" height="${v/mx*H}" rx="2" style="fill:var(--save);opacity:.8"/>`).join(""),pts=x.solar.map((v,k)=>`${k*bw+bw/2},${H-v/mx*H}`).join(" ");
+ return`<svg viewBox="0 0 ${W} ${H+20}" width="100%" role="img" aria-label="Electricity used and solar made by hour of day">${bars}<polyline points="${pts}" fill="none" style="stroke:var(--sun)" stroke-width="3"/>${[0,6,12,18].map(h=>`<text x="${h*bw}" y="${H+15}" font-size="11" style="fill:var(--mut)">${hl(h)}</text>`).join("")}</svg>`}
+function render(r,job){const out=$("#out"),tot=r.plan.reduce((s,p)=>s+p.save,0),pct=r.bill_month?100*tot/r.bill_month:0,b=r.battery,
+ best=b.curve.reduce((x,y)=>y.profit>x.profit?y:x),f=r.forecast;out.hidden=false;
+ out.innerHTML=`<h2 style="margin-top:0">Your result</h2><div class="big">${R(tot)} a month</div>
+ <p style="margin:2px 0 0">is what these changes could save you, using your most recent weeks of data.</p>
+ <div class="two"><div><small>Estimated bill now</small><b style="font-size:22px">${R(r.bill_month)}</b></div><div><small>After the changes</small><b style="font-size:22px">${R(r.after_month)}</b></div><div><small>Saving</small><b style="font-size:22px">${pct.toFixed(1)}%</b></div></div>
+ <h2>What to change</h2><div class="plan">${r.plan.map(p=>`<div class="item"><b>${p.name}</b><span class="amt">${R(p.save)} / month</span><span class="how">${p.how}</span><span class="tag">${p.effort}</span></div>`).join("")||"<p>We could not find laundry, pump, water heater or air conditioner columns, so no habit changes could be tested.</p>"}</div>
+ <h2>When you use the most power</h2><p style="margin:0 0 8px">Your busiest hours are around <b>${r.busy.map(hl).join(", ")}</b>. Green bars show your electricity use, the gold line shows solar.</p>${chart(r.hourly)}
+ <p style="color:var(--mut)">We can predict your usage to within about ${f.error_pct}% on average, ${f.better_pct>0?`which is ${f.better_pct}% better than simply assuming “same as yesterday”.`:"about the same as assuming “same as yesterday”."}</p>
+ ${r.patterns?`<h2>Your day in four patterns</h2><div class="plan">${r.patterns.map(p=>`<div class="item"><b>${p.name}</b><span class="amt">${p.kwh} kWh per half hour</span><span class="how">About ${p.hours_per_day} hours of your day</span></div>`).join("")}</div>${r.has_cluster_img?`<details><summary>Show the pattern chart</summary><img src="/api/img?job=${job}" alt="Usage pattern chart" style="max-width:100%"></details>`:""}`:""}
+ <h2>Should you buy a battery?</h2><p style="margin:0 0 8px">A battery stores free midday solar for the expensive evening hours. Without one, your energy bill is about ${R(b.base_bill_month)} a month. The table assumes ₹25,000 per kWh and counts replacing the battery when it wears out.</p>
+ <div class="scroll"><table><tr><th>Battery size</th><th>Bill per month</th><th>Profit per year*</th><th>Replace every</th></tr>${b.curve.map(c=>`<tr class="${best.profit>0&&c===best?"best":""}"><td>${c.kwh} kWh</td><td>${R(c.bill)}</td><td>${R(c.profit)}</td><td>${c.replace.toFixed(0)} years</td></tr>`).join("")}</table></div>
+ <p style="color:var(--mut);font-size:14px">*Bill savings minus the yearly cost of buying and replacing the battery. ${best.profit>0?`Best size here: <b>${best.kwh} kWh</b>.`:"At this price no battery pays for itself."}</p>
+ <p style="margin:14px 0 6px"><b>If the price or savings are different:</b></p><div class="scroll"><table><tr><th>Case</th><th>Best size</th><th>Profit per year</th></tr>${b.scenarios.map(s=>`<tr><td>${s.name}</td><td>${s.profit>0?s.kwh+" kWh":"None pays"}</td><td>${s.profit>0?R(s.profit):"–"}</td></tr>`).join("")}</table></div>
+ <div class="row"><button id="again">Check another file</button></div>
+ <p class="note">Based on ${r.days} days of data (${r.start} to ${r.end}, ${r.rows} readings). ${r.notes.length?"Not provided, so assumed: "+r.notes.join("; ")+". ":""}${r.appliances_found<4?"Few appliance columns were found, so pattern finding was skipped and fewer ideas could be tested. ":""}${r.days<60?"Less than two months of data covers only part of the year, so treat the battery numbers with extra care.":""}</p>`;
+ $("#again").onclick=()=>{out.hidden=true;$("#up").hidden=false;inp.value=""};out.scrollIntoView({behavior:"smooth",block:"start"})}
+</script></body></html>
