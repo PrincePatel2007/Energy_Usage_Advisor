@@ -1,0 +1,6 @@
+lever,grid_cost_inr,saving_inr,saving_per_day_inr,saving_pct,note
+Current schedule,103767,0,0.0,0.0,
++ Shift laundry and pumps to midday,100210,3557,122.7,3.43,
++ Pre-heat geyser water at midday (storage tank),98595,5172,178.4,4.98,
++ AC setpoint +2 C,95990,7777,268.2,7.49,
++ AC pre-cooling before evening peak,92177,11590,399.6,11.17,

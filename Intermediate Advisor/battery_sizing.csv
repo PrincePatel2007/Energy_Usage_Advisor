@@ -1,0 +1,5 @@
+battery_kwh,grid_cost_inr,extra_saving_inr,extra_saving_per_day,saving_per_kwh_capacity_per_day_inr,full_cycles_per_day
+50,80437,11740,404.8,8.1,0.85
+100,69162,23015,793.6,7.94,0.84
+200,55440,36737,1266.8,6.33,0.67
+400,51876,40301,1389.7,3.47,0.37
