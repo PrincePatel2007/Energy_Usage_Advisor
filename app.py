@@ -8,10 +8,16 @@ from urllib.parse import urlparse, parse_qs
 import numpy as np, pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DATASET = "/Users/princepatel/AI Project/Datasets/hostel_energy_dataset_3months.csv"        # name the step scripts expect; also the built-in test file
+DATASET = "hostel_energy_dataset_3months.csv"        # name the step scripts expect; also the built-in test file
 STEPS = ["Checking your data", "Forecasting your usage", "Finding your usage patterns",
          "Testing smart scheduling", "Testing habit changes", "Sizing a battery"]
 JOBS = {}
+
+def find_dataset():
+    for folder in (HERE, os.path.join(HERE, "Datasets"), os.path.join(HERE, "datasets"), os.path.join(HERE, "data")):
+        p = os.path.join(folder, DATASET)
+        if os.path.exists(p): return p
+    return None
 
 class UserError(Exception): pass
 
@@ -60,7 +66,7 @@ def normalise(raw):
     out = out.interpolate(limit=6, limit_area="inside").ffill().bfill().fillna(0)
     out.index.name = "timestamp"
     h = out.index.hour + out.index.minute / 60
-    out["hour"] = h; out["is_weekend"] = (out.index.dayofweek >= 5).astype(int)
+    out["hour"] = h; out["is_weekend"] = (out.index.day_of_week >= 5).astype(int)
     t = out["grid_tariff_inr_per_kwh"]
     if t.isna().all() or tr is None:
         out["grid_tariff_inr_per_kwh"] = np.where((h >= 18) & (h < 22), 9.5, np.where((h >= 6) & (h < 18), 7.0, 5.5))
@@ -83,16 +89,44 @@ def run_step(n, wd, patch=None):
     p = os.path.join(wd, "run_step%d.py" % n); open(p, "w", encoding="utf-8").write(src)
     r = subprocess.run([sys.executable, p], cwd=wd, capture_output=True, text=True, timeout=1500,
                        env={**os.environ, "MPLBACKEND": "Agg"})
-    if r.returncode: raise RuntimeError("step %d failed: %s" % (n, (r.stderr.strip().splitlines() or ["unknown error"])[-1]))
+    if r.returncode:
+        last = (r.stderr.strip().splitlines() or ["unknown error"])[-1]
+        raise RuntimeError("step %d failed: %s" % (n, last))
+
+SKIP_DIRS = {".venv", "venv", "__pycache__", ".git", "node_modules"}
+
+def find_in(wd, name):
+    """Find a file the steps produced, anywhere in the project copy (shallowest match wins)."""
+    hits = []
+    for root, dirs, files in os.walk(wd):
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+        if name in files: hits.append(os.path.join(root, name))
+    if not hits: raise UserError("A step did not produce %s. Check the step files are the ones from this project." % name)
+    return min(hits, key=lambda p: (p.count(os.sep), p))
+
+def has_in(wd, name):
+    try: find_in(wd, name); return True
+    except UserError: return False
 
 def job_thread(jid, raw_text, sample):
-    J = JOBS[jid]; wd = J["wd"] = tempfile.mkdtemp(prefix="hostel_"); st = J["steps"]
+    J = JOBS[jid]; st = J["steps"]
+    wd = J["wd"] = os.path.join(tempfile.mkdtemp(prefix="hostel_"), "project")
+    shutil.copytree(HERE, wd, ignore=shutil.ignore_patterns(*SKIP_DIRS))
     def mark(i, state, msg=""): st[i].update(state=state, msg=msg)
     try:
         mark(0, "run")
-        raw = pd.read_csv(os.path.join(HERE, DATASET)) if sample else pd.read_csv(io.StringIO(raw_text))
-        if sample and not os.path.exists(os.path.join(HERE, DATASET)): raise UserError("Put %s in the app folder to use the test file." % DATASET)
-        df, notes, have = normalise(raw); df.to_csv(os.path.join(wd, DATASET))
+        if sample:
+            found = find_dataset()
+            if not found: raise UserError("Could not find %s. Put it in the same folder as app.py, or in a Datasets folder next to it." % DATASET)
+            raw = pd.read_csv(found)
+        else:
+            raw = pd.read_csv(io.StringIO(raw_text))
+        df, notes, have = normalise(raw)
+        # write the prepared data to the project's main folder (where step 1 reads it) and to any other copy of it
+        targets = {os.path.join(wd, DATASET)}
+        for r_, d_, f_ in os.walk(wd):
+            if DATASET in f_ and not any(x in r_ for x in SKIP_DIRS): targets.add(os.path.join(r_, DATASET))
+        for t_ in targets: df.to_csv(t_)
         days = df.index.normalize().nunique()
         if days < 21: raise UserError("We need at least 3 weeks of data.")
         n_test = max(7, round(.3 * days)); last = df.index.max().normalize()
@@ -121,7 +155,7 @@ LEVERS = {"laundry": ("Run laundry and water pumps in the middle of the day", "M
           "geyser": ("Heat water at midday and store it in an insulated tank", "Instead of heating water in the evening, heat it from midday sun. Needs an insulated storage tank.", "Equipment")}
 
 def build_result(wd, df, notes, have, days):
-    rd = lambda f, **k: pd.read_csv(os.path.join(wd, f), **k)
+    rd = lambda f, **k: pd.read_csv(find_in(wd, f), **k)
     r = {"days": int(days), "rows": len(df), "start": str(df.index.min().date()), "end": str(df.index.max().date()),
          "notes": notes, "appliances_found": len(have)}
     # forecast quality (step 2)
@@ -136,7 +170,7 @@ def build_result(wd, df, notes, have, days):
     r["hourly"] = {"use": [round(v, 2) for v in use], "solar": [round(v, 2) for v in sun]}
     r["busy"] = sorted(int(h) for h in use.sort_values(ascending=False).index[:3])
     # usage patterns (step 3)
-    if os.path.exists(os.path.join(wd, "cluster_labels.csv")):
+    if has_in(wd, "cluster_labels.csv"):
         d = df.join(rd("cluster_labels.csv", index_col=0, parse_dates=True))
         c = d.groupby("cluster").agg(n=("hour", "size"), kwh=("total_consumption_kwh", "mean"), sun=("solar_generation_kwh", "mean"))
         names = {}; left = list(c.index)
@@ -145,7 +179,7 @@ def build_result(wd, df, notes, have, days):
         if left: q = c.loc[left].kwh.idxmin(); names[q] = "Quiet periods"; left.remove(q)
         for k in left: names[k] = "Busy but not peak"
         r["patterns"] = [{"name": names[k], "hours_per_day": round(v.n / days / 2, 1), "kwh": round(v.kwh, 1)} for k, v in c.sort_values("kwh", ascending=False).iterrows()]
-        r["has_cluster_img"] = os.path.exists(os.path.join(wd, "clusters.png"))
+        r["has_cluster_img"] = has_in(wd, "clusters.png")
     # smart scheduling (step 4) and habit levers (step 5)
     td = max(1, te.index.normalize().nunique()); M = 30 / td
     adv = rd("advisor_schedule.csv", index_col=0, parse_dates=True)
@@ -177,8 +211,8 @@ class H(BaseHTTPRequestHandler):
         J = JOBS.get(q.get("job", [""])[0])
         if u.path == "/api/status" and J:
             return self.send(200, {"steps": J["steps"], "done": J["done"], "error": J["error"], "result": J["result"]})
-        if u.path == "/api/img" and J and os.path.exists(os.path.join(J["wd"], "clusters.png")):
-            return self.send(200, open(os.path.join(J["wd"], "clusters.png"), "rb").read(), "image/png")
+        if u.path == "/api/img" and J and J["wd"] and has_in(J["wd"], "clusters.png"):
+            return self.send(200, open(find_in(J["wd"], "clusters.png"), "rb").read(), "image/png")
         self.send(404, {"error": "not found"})
     def do_POST(self):
         u = urlparse(self.path); body = self.rfile.read(int(self.headers.get("Content-Length", 0))).decode("utf-8", "replace")
