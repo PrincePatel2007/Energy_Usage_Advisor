@@ -13,6 +13,14 @@ STEPS = ["Checking your data", "Forecasting your usage", "Finding your usage pat
          "Testing smart scheduling", "Testing habit changes", "Sizing a battery"]
 JOBS = {}
 
+SAMPLES = [("test1", "Sample 1"), ("test2", "Sample 2"), ("test3", "Sample 3")]
+
+def find_sample(name):
+    for folder in (HERE, os.path.join(HERE, "Datasets"), os.path.join(HERE, "datasets"), os.path.join(HERE, "data")):
+        p = os.path.join(folder, name + ".csv")
+        if os.path.exists(p): return p
+    return None
+
 def find_dataset():
     for folder in (HERE, os.path.join(HERE, "Datasets"), os.path.join(HERE, "datasets"), os.path.join(HERE, "data")):
         p = os.path.join(folder, DATASET)
@@ -95,6 +103,19 @@ def run_step(n, wd, patch=None):
 
 SKIP_DIRS = {".venv", "venv", "__pycache__", ".git", "node_modules"}
 
+def unify_split(wd):
+    """Step 1 writes fresh train.csv / test.csv. Any other copy of those files in the project
+    (for example an old Datasets/test.csv) is replaced with the newest one, so every later step reads the same split."""
+    for name in ("train.csv", "test.csv"):
+        hits = []
+        for r_, d_, f_ in os.walk(wd):
+            if name in f_ and not any(x in r_ for x in SKIP_DIRS):
+                fp = os.path.join(r_, name); hits.append((os.path.getmtime(fp), fp))
+        if len(hits) > 1:
+            newest = max(hits)[1]
+            for _, fp in hits:
+                if fp != newest: shutil.copy2(newest, fp)
+
 def find_in(wd, name):
     """Find a file the steps produced, anywhere in the project copy (shallowest match wins)."""
     hits = []
@@ -108,7 +129,7 @@ def has_in(wd, name):
     try: find_in(wd, name); return True
     except UserError: return False
 
-def job_thread(jid, raw_text, sample):
+def job_thread(jid, raw_text, sample, price=25000.0):
     J = JOBS[jid]; st = J["steps"]
     wd = J["wd"] = os.path.join(tempfile.mkdtemp(prefix="hostel_"), "project")
     shutil.copytree(HERE, wd, ignore=shutil.ignore_patterns(*SKIP_DIRS))
@@ -116,8 +137,8 @@ def job_thread(jid, raw_text, sample):
     try:
         mark(0, "run")
         if sample:
-            found = find_dataset()
-            if not found: raise UserError("Could not find %s. Put it in the same folder as app.py, or in a Datasets folder next to it." % DATASET)
+            found = find_sample(sample)
+            if not found: raise UserError("Could not find the sample file %s.csv. Put it in the Datasets folder next to app.py." % sample)
             raw = pd.read_csv(found)
         else:
             raw = pd.read_csv(io.StringIO(raw_text))
@@ -134,7 +155,7 @@ def job_thread(jid, raw_text, sample):
         def patch1(s):
             s2 = re.sub(r'df\.loc\[:"[^"]+"\]', 'df.loc[:"%s"]' % tr_end, s); s2 = re.sub(r'df\.loc\["[\d-]+":\]', 'df.loc["%s":]' % te_start, s2)
             return s2
-        run_step(1, wd, patch1); mark(0, "done")
+        run_step(1, wd, patch1); unify_split(wd); mark(0, "done")
         patch2 = lambda s: s.replace("for name, p in preds.items():\n    print(f\"{name:30s} MAE on festival", "for name, p in (preds.items() if mask.any() else []):\n    print(f\"{name:30s} MAE on festival")
         mark(1, "run"); run_step(2, wd, patch2); mark(1, "done")
         if len(have) >= 4:
@@ -143,7 +164,7 @@ def job_thread(jid, raw_text, sample):
         mark(3, "run"); run_step(4, wd); mark(3, "done")
         mark(4, "run"); run_step(5, wd); mark(4, "done")
         mark(5, "run"); run_step(6, wd); mark(5, "done")
-        J["result"] = build_result(wd, df, notes, have, days)
+        J["result"] = build_result(wd, df, notes, have, days, price)
     except UserError as e: J["error"] = str(e)
     except Exception as e: J["error"] = str(e) if isinstance(e, RuntimeError) else "Something went wrong: %s" % e; traceback.print_exc()
     J["done"] = True
@@ -154,7 +175,7 @@ LEVERS = {"laundry": ("Run laundry and water pumps in the middle of the day", "M
           "pre-cool": ("Cool rooms in the afternoon, before the evening rush", "Start cooling between 2 pm and 5:30 pm while solar is strong, so less AC runs when power is expensive.", "Hostel rule"),
           "geyser": ("Heat water at midday and store it in an insulated tank", "Instead of heating water in the evening, heat it from midday sun. Needs an insulated storage tank.", "Equipment")}
 
-def build_result(wd, df, notes, have, days):
+def build_result(wd, df, notes, have, days, price=25000.0):
     rd = lambda f, **k: pd.read_csv(find_in(wd, f), **k)
     r = {"days": int(days), "rows": len(df), "start": str(df.index.min().date()), "end": str(df.index.max().date()),
          "notes": notes, "appliances_found": len(have)}
@@ -184,19 +205,39 @@ def build_result(wd, df, notes, have, days):
     td = max(1, te.index.normalize().nunique()); M = 30 / td
     adv = rd("advisor_schedule.csv", index_col=0, parse_dates=True)
     r["schedule_saving_month"] = round(float(adv.cost_old.sum() - adv.cost_new.sum()) * M)
-    lv = rd("savings_levers.csv"); base = float(lv.iloc[0].grid_cost_inr); plan, prev = [], base
+    # The bill is computed from THIS upload's own test window, so it always matches the data the user gave.
+    # Step 5 supplies the savings percentages; if step 5 read different data, we say so instead of showing it.
+    n_test = max(7, round(.3 * days)); last = df.index.normalize().max()
+    tw = df[df.index.normalize() >= last - pd.Timedelta(days=n_test - 1)]
+    tdays = max(1, tw.index.normalize().nunique())
+    own_base = float((np.clip(tw.total_consumption_kwh - tw.solar_generation_kwh, 0, None) * tw.grid_tariff_inr_per_kwh).sum())
+    lv = rd("savings_levers.csv"); step5_base = float(lv.iloc[0].grid_cost_inr)
+    if abs(step5_base - own_base) > 0.05 * own_base:
+        r["notes"].append("the habit-change step read different data from your file, so the percentages were applied to your own readings")
+    ratio = own_base / step5_base if step5_base else 1.0
+    Mo = 30 / tdays; base_m = own_base * Mo
+    plan, prev = [], float(lv.iloc[0].grid_cost_inr)
     for _, row in lv.iloc[1:].iterrows():
         key = next((k for k in LEVERS if k in row.lever.lower()), None)
-        s = (prev - float(row.grid_cost_inr)) * M; prev = float(row.grid_cost_inr)
-        if key and s > 1: plan.append({"name": LEVERS[key][0], "how": LEVERS[key][1], "effort": LEVERS[key][2], "save": round(s)})
+        s_ = (prev - float(row.grid_cost_inr)) * M * ratio; prev = float(row.grid_cost_inr)
+        if key and s_ > 1: plan.append({"name": LEVERS[key][0], "how": LEVERS[key][1], "effort": LEVERS[key][2], "save": round(s_)})
     plan.sort(key=lambda p: -p["save"]); r["plan"] = plan
-    r["bill_month"], r["after_month"] = round(base * M), round(prev * M)
-    # battery (step 6)
-    cur = rd("battery_size_profit_curve.csv"); sc = rd("battery_size_optimum.csv")
+    r["schedule_saving_month"] = round(r["schedule_saving_month"] * ratio)
+    r["bill_month"], r["after_month"] = round(base_m), round(base_m * (1 - (sum(p["save"] for p in plan) / (base_m or 1))))
+    # battery (step 6 gives the bills and replacement years; profit is recalculated for the user's price)
+    cur = rd("battery_size_profit_curve.csv")
     full_base = float((np.clip(df.total_consumption_kwh - df.solar_generation_kwh, 0, None) * df.grid_tariff_inr_per_kwh).sum() / days * 30)
-    r["battery"] = {"base_bill_month": round(full_base),
-        "curve": [{"kwh": int(x.battery_kwh), "bill": round(x.bill_per_month), "profit": round(x.net_profit_per_year), "replace": float(x.replace_every_yrs)} for x in cur.itertuples()],
-        "scenarios": [{"name": x.scenario, "kwh": float(x.best_size_kwh), "profit": round(x.net_profit_per_year)} for x in sc.itertuples()]}
+    def profit(x, pr, f=1.0):
+        saving_yr = f * (full_base - float(x.bill_per_month)) * 12
+        return saving_yr - float(x.battery_kwh) * pr / float(x.replace_every_yrs)
+    def best(pr, f=1.0):
+        p_, x_ = max(((profit(x, pr, f), x) for x in cur.itertuples()), key=lambda t: t[0])
+        return {"kwh": int(x_.battery_kwh), "profit": round(p_)}
+    curve = [{"kwh": int(x.battery_kwh), "bill": round(float(x.bill_per_month)), "profit": round(profit(x, price)), "replace": float(x.replace_every_yrs)} for x in cur.itertuples()]
+    cases = [("Your price, ₹%s per kWh" % f"{price:,.0f}", best(price)), ("Savings 20% lower", best(price, 0.8)),
+             ("Battery price 20% lower", best(price * 0.8)), ("Battery price 40% higher", best(price * 1.4))]
+    r["battery"] = {"base_bill_month": round(full_base), "price": round(price), "curve": curve,
+                    "scenarios": [{"name": n, "kwh": b["kwh"], "profit": b["profit"]} for n, b in cases]}
     return r
 
 # ---------------------------------------------------------------- 4. tiny web server
@@ -211,6 +252,8 @@ class H(BaseHTTPRequestHandler):
         J = JOBS.get(q.get("job", [""])[0])
         if u.path == "/api/status" and J:
             return self.send(200, {"steps": J["steps"], "done": J["done"], "error": J["error"], "result": J["result"]})
+        if u.path == "/api/samples":
+            return self.send(200, [{"id": i, "label": l} for i, l in SAMPLES if find_sample(i)])
         if u.path == "/api/img" and J and J["wd"] and has_in(J["wd"], "clusters.png"):
             return self.send(200, open(find_in(J["wd"], "clusters.png"), "rb").read(), "image/png")
         self.send(404, {"error": "not found"})
@@ -219,7 +262,11 @@ class H(BaseHTTPRequestHandler):
         if u.path != "/api/run": return self.send(404, {"error": "not found"})
         jid = uuid.uuid4().hex[:8]
         JOBS[jid] = {"steps": [{"name": n, "state": "wait", "msg": ""} for n in STEPS], "done": False, "error": None, "result": None, "wd": ""}
-        threading.Thread(target=job_thread, args=(jid, body, "sample" in parse_qs(u.query)), daemon=True).start()
+        q_ = parse_qs(u.query); sample = q_.get("sample", [""])[0]
+        try: price = min(200000, max(1000, float(q_.get("price", ["25000"])[0])))
+        except ValueError: price = 25000.0
+        if sample and sample not in [i for i, _ in SAMPLES]: return self.send(400, {"error": "unknown sample"})
+        threading.Thread(target=job_thread, args=(jid, body, sample, price), daemon=True).start()
         self.send(200, {"job": jid})
 
 if __name__ == "__main__":
