@@ -1,5 +1,7 @@
-matplotlib==3.11.2
-numpy==2.5.4
-pandas==3.1.1
-scikit-learn==1.9.1
-scipy==1.18.1
+# Hostel Energy Advisor - Python packages
+# Install with:  .venv/bin/pip install -r requirements.txt
+pandas>=2.2
+numpy>=1.26
+scipy>=1.11
+scikit-learn>=1.4
+matplotlib>=3.8
