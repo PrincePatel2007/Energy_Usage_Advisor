@@ -32,7 +32,7 @@ Choose one of the two options below.
 2. Go to the folder where you want the project, then clone it:
    ```
    cd ~/Desktop
-   git clone <your-repo-url> "AI Project"
+   git clone https://github.com/PrincePatel2007/Energy_Usage_Advisor "AI Project"
    cd "AI Project"
    ```
 3. To get future updates later, run `git pull` inside the project folder.
