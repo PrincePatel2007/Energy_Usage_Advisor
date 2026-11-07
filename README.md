@@ -17,7 +17,7 @@ Choose one of the two options below.
 
 ### Option A: download as a ZIP (no tools needed)
 
-1. Open the project's repository page in your browser: `<your-repo-url>`
+1. Open the project's repository page in your browser: `https://github.com/PrincePatel2007/Energy_Usage_Advisor`
 2. Click the green **Code** button, then **Download ZIP**.
 3. Open the downloaded ZIP. Your computer unzips it into a folder, usually called `AI-Project` or similar.
 4. Move that folder somewhere easy to find, such as your Desktop or Documents.
